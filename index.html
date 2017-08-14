@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title></title>
+  <link href="./bootstrap.min.css" rel="Stylesheet" type="text/css">
+
+  <style>
+    .top-panel {
+      padding: 10px 5px 0 5px;
+    }
+
+    .top-panel .col-md-3 {
+      text-align: center;
+      padding: 0 5px;
+    }
+
+    .left-panel {
+      padding: 10px 0 10px 10px;
+    }
+
+    .left-panel .col-md-12 {
+      padding: 0;
+    }
+
+    .right-panel {
+      padding: 10px;
+    }
+
+    #d3-map-container {
+      width: 100%;
+      height: 100%;
+      background: rgb(245, 245, 245);
+      position: relative;
+    }
+
+    #d3-map-refresh {
+      position: absolute;
+      top: 5px;
+      left: 5px;
+      cursor: pointer;
+    }
+
+    #d3-map-info {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+    }
+
+    #d3-map-wrapper {
+      width: 100%;
+      height: 560px;
+    }
+
+    .background {
+      fill: none;
+      pointer-events: all;
+    }
+
+    div.d3-tooltip {
+      color: #222;
+      background: #fff;
+      padding: .5em;
+      text-shadow: #f5f5f5 0 1px 0;
+      border-radius: 2px;
+      box-shadow: 0px 0px 2px 0px #a6a6a6;
+      opacity: 0.9;
+      position: absolute;
+    }
+
+    div.d3-tooltip p {
+      margin: 0;
+    }
+
+    div.d3-tooltip p b {
+      margin-left: 5px;
+      float: right;
+    }
+
+    .d3-hide {
+      display: none;
+    }
+
+    .custom-list-header {
+      text-align: center;
+      margin: 0;
+      padding: 4px;
+      background-color: rgb(85, 170, 255);
+      font-size: 18px;
+      color: rgb(255, 255, 255);
+      font-weight: bold;
+      font-style: normal;
+      cursor: pointer;
+    }
+
+    .custom-list {
+      margin: 0;
+      padding: 0px;
+      background-color: rgb(245, 245, 245);
+    }
+
+    .custom-list p {
+      padding: 0px 5px;
+      margin: 0;
+      cursor: pointer;
+    }
+
+    .collapsed {
+      display: none;
+    }
+
+    .custom-count-header {
+      margin: 0;
+      padding: 4px;
+      background-color: rgb(85, 170, 0);
+      font-size: 18px;
+      color: rgb(255, 255, 255);
+      font-weight: bold;
+      font-style: normal;
+    }
+
+    .custom-count {
+      margin: 0;
+      padding: 4px;
+      background-color: rgb(245, 245, 245);
+      font-size: 20px;
+    }
+
+    .d3-active {}
+  </style>
+</head>
+
+<body>
+  <div class="main-container">
+
+    <div class="top-panel col-md-offset-3 col-md-9 col-sm-offset-3 col-sm-9">
+      <div class="col-md-3 col-sm-3">
+        <p class="custom-count-header">Districts</p>
+        <p id="district-count" class="custom-count">0</p>
+      </div>
+      <div class="col-md-3 col-sm-3">
+        <p class="custom-count-header">Settlements</p>
+        <p id="settlement-count" class="custom-count">0</p>
+      </div>
+      <div class="col-md-3 col-sm-3">
+        <p class="custom-count-header">Sectors</p>
+        <p id="sector-count" class="custom-count">0</p>
+      </div>
+      <div class="col-md-3 col-sm-3">
+        <p class="custom-count-header">Agencies</p>
+        <p id="agency-count" class="custom-count">0</p>
+      </div>
+    </div>
+
+    <!--<div class="bottom-panel col-md-12" style="padding: 0 5px;">  <span class="glyphicon glyphicon-menu-down"></span>-->
+    <div class="left-panel col-md-3 col-sm-3">
+      <div class="col-md-12">
+        <p class="custom-list-header">District</p>
+        <div id="district-list" class="custom-list"></div>
+      </div>
+      <div class="col-md-12">
+        <p class="custom-list-header">Settlement</p>
+        <div id="settlement-list" class="custom-list"></div>
+      </div>
+      <div class="col-md-12">
+        <p class="custom-list-header">Sector</p>
+        <div id="sector-list" class="custom-list"></div>
+      </div>
+      <div class="col-md-12">
+        <p class="custom-list-header">Agency</p>
+        <div id="agency-list" class="custom-list"></div>
+      </div>
+    </div>
+
+    <div class="right-panel col-md-9 col-sm-9">
+      <div id="d3-map-container">
+        <p id="d3-map-info">Click on map or left menu to see filtered stats</p>
+        <p id="d3-map-refresh">Clear all</p>
+        <div id="d3-map-wrapper"></div>
+      </div>
+    </div>
+    <!--</div>-->
+  </div>
+
+  <script src="./d3.v3.min.js"></script>
+  <script src="./jquery.min.js"></script>
+  <script src="./topojson.v1.min.js"></script>
+  <script src="./queue.v1.min.js"></script>
+  <script>
+    ;
+    (function ($, d3) {
+      // https://www.humanitarianresponse.info/en/operations/afghanistan/cvwg-3w
+      // https://public.tableau.com/profile/geo.gecko#!/vizhome/Districtpolygon/v1?publish=yes
+      'use strict';
+      String.prototype.replaceAll = function (search, replacement) {
+        var target = this;
+        return target.replace(new RegExp(search, 'g'), replacement);
+      };
+
+      queue()
+        .defer(d3.json, "./UgandaDistricts.geojson")
+        .defer(d3.csv, "./Map5_T1.csv") //Actor_ID,Name,Abb
+        .defer(d3.csv, "./Map5_T2.csv") //District,Settlement,Settlement_ID,Long,Lat
+        .defer(d3.csv, "./Map5_T3.csv") //Sector,Sector_ID
+        .defer(d3.csv, "./Map5_T4.csv") //Actor_ID,Settlement_ID,Sector_ID
+        .await(ready);
+
+
+      var global = {};
+      global.selectedDistrict = []; // name
+      global.selectedSector = []; // ID
+      global.selectedSettlement = undefined; //[]; // ID
+      global.selectedAgency = []; // ID
+      global.districtCount;
+      global.sectorCount;
+      global.settlementCount;
+      global.agencyCount;
+      global.needRefreshDistrict;
+
+
+      function refreshCounts() {
+        d3.select("#district-count").text(global.districtCount);
+        d3.select("#sector-count").text(global.sectorCount);
+        d3.select("#settlement-count").text(global.settlementCount);
+        d3.select("#agency-count").text(global.agencyCount);
+        // global.selectedDataset = dataset;
+        global.selectedSettlement = undefined; //[];
+        global.selectedSector = [];
+        global.selectedAgency = [];
+      }
+
+      function ready(error, ugandaGeoJson, nameAbb, districtSettlement, sector, relationship) {
+        if (error) throw error;
+        // console.log(ugandaGeoJson, ActorID, SettlementID, SectorID, AllID)
+
+        //need join all data
+        var nameAbbKays = d3.keys(nameAbb[0]);
+        var districtSettlementKays = d3.keys(districtSettlement[0]);
+        var sectorKays = d3.keys(sector[0]);
+        var dataset = relationship.map(function (d) {
+          var i;
+          for (i = 0; i < nameAbb.length; i++) {
+            if (nameAbb[i].Actor_ID === d.Actor_ID) {
+              nameAbbKays.map(function (k) {
+                d[k] = nameAbb[i][k];
+              });
+              break;
+            }
+          }
+          for (i = 0; i < districtSettlement.length; i++) {
+            if (districtSettlement[i].Settlement_ID === d.Settlement_ID) {
+              districtSettlementKays.map(function (k) {
+                d[k] = districtSettlement[i][k];
+              });
+              break;
+            }
+          }
+          for (i = 0; i < sector.length; i++) {
+            if (sector[i].Sector_ID === d.Sector_ID) {
+              sectorKays.map(function (k) {
+                d[k] = sector[i][k];
+              });
+              break;
+            }
+          }
+          return d;
+        });
+        // console.log(dataset);
+
+        // http://bl.ocks.org/phoebebright/raw/3176159/
+        var districtList = d3.nest().key(function (d) {
+          return d.District;
+        }).sortKeys(d3.ascending).entries(districtSettlement)
+        var sectorList = d3.nest().key(function (d) {
+          return d.Sector;
+        }).sortKeys(d3.ascending).entries(sector);
+        var settlementList = d3.nest().key(function (d) {
+          return d.Settlement;
+        }).sortKeys(d3.ascending).entries(districtSettlement);
+        var agencyList = d3.nest().key(function (d) {
+          return d.Name;
+        }).sortKeys(d3.ascending).entries(nameAbb);
+        global.districtCount = districtList.length;
+        global.sectorCount = sectorList.length;
+        global.settlementCount = settlementList.length;
+        global.agencyCount = agencyList.length;
+        refreshCounts();
+
+        updateLeftPanel(districtList, null, null, null, dataset);
+
+
+        // d3.selectAll('.custom-list-header').on("click", function(){
+        //   var customList = d3.select(this.parentNode).select("div");
+        //   // if (customList.node().getBoundingClientRect().width===0){}
+        //   console.log(customList.node().getBoundingClientRect());
+        // });
+        $(".custom-list-header").click(function () {
+          // d3.select(this.parentNode).selectAll("p").style("background", "transparent");
+          $(this).siblings(".custom-list").toggleClass('collapsed');
+          // $(this).find("span").toggleClass('glyphicon-menu-down').toggleClass('glyphicon-menu-right');
+        });
+        // var h = (window.innerHeight ||
+        //   document.documentElement.clientHeight ||
+        //   document.body.clientHeight) - 100; //wrapper.node().offsetHeight - 20;
+        var wrapper = d3.select("#d3-map-wrapper");
+        var width = wrapper.node().offsetWidth || 960;
+        var height = wrapper.node().offsetHeight || 480;
+        var domain = [+Infinity, -Infinity];
+        var opacity = 0.3;
+        var color = d3.scale.linear().domain(domain) //http://bl.ocks.org/jfreyre/b1882159636cc9e1283a
+          .interpolate(d3.interpolateHcl)
+          .range([d3.rgb("#56e495"), d3.rgb('#0b793c')]);//#f597aa #a02842
+
+        var tooltip = d3.select("#d3-map-container")
+          .append("div")
+          .attr("class", "d3-tooltip d3-hide");
+
+        // var controls = d3.select("body")
+        //   .append("div")
+        //   .attr("class", "controls")
+        //   .append("a")
+        //   .attr("id", "reset")
+        //   // .attr("class", "d3-hide")
+        //   .attr("href", "#")
+        //   .text("reset")
+        // .on("click", click_reset);
+        d3.select("#d3-map-wrapper").selectAll("*").remove();
+        var svg = d3.select("#d3-map-wrapper")
+          .append("svg")
+          .attr("xmlns", "http://www.w3.org/2000/svg")
+          .attr("preserveAspectRatio", "xMidYMid")
+          .attr("viewBox", "0 0 " + width + " " + height)
+          .attr("width", width)
+          .attr("height", height);
+
+        svg.append("rect")
+          .attr("class", "background")
+          .attr("width", width)
+          .attr("height", height)
+          .on("click", refreshMap)
+
+        var g = svg.append("g")
+          .attr("id", "uganda");
+
+        // var projection = d3.geo.albers()
+        //   .center([33.25, 1.3])
+        //   .rotate([1,1, 1])//.rotate([-1, 11.5, -16.4])
+        //   .parallels([25, 35])
+        //   .translate([width / 2, height / 1.5])
+        //   .scale(5000);
+        // console.log(width, height)
+        var projection = d3.geo.mercator()
+          // .center([33.25, 1.3])
+          //   .rotate([-1, 11.5, -16.4])
+          //   .parallels([25, 35])
+          // .scale(500)
+          // .translate([width / 2, height / 2]);
+          .scale(5000).translate([-2400, 420]); //.translate([-width*3.4, height-150]);//
+
+        var path = d3.geo.path()
+          .projection(projection);
+
+        var datasetNest = d3.nest().key(function (d) {
+          return d.District;
+        }).entries(dataset);
+
+        var uganda = g.append("g")
+          // .attr("id", "parishes")
+          // .attr("class", "d3-hide")
+          .selectAll("path")
+          .data(ugandaGeoJson.features)
+          .enter()
+          .append("path")
+          .each(function (d) {
+            datasetNest.map(function (c) {
+              if (c.key === d.properties.DNAME_06) {
+                d.properties._sectorList = d3.nest().key(function (a) {
+                  return a.Sector;
+                }).entries(c.values);
+                d.properties._settlementList = d3.nest().key(function (a) {
+                  return a.Settlement;
+                }).entries(c.values);
+                d.properties._agencyList = d3.nest().key(function (a) {
+                  return a.Name;
+                }).entries(c.values);
+                domain[0] = d.properties._agencyList.length < domain[0] ? d.properties._agencyList.length :
+                  domain[
+                    0];
+                domain[1] = d.properties._agencyList.length > domain[1] ? d.properties._agencyList.length :
+                  domain[
+                    1];
+                color.domain(domain);
+              }
+            });
+          })
+          // .attr("id", function (p) {
+          //   return p.properties['PNAME_2006'];
+          // })
+          .attr("class", function (d) {
+            return "district district-" + d.properties.DNAME_06.replaceAll(' ', "_");
+          })
+          .style("cursor", "pointer")
+          .style("fill", function (d) {
+            return d.properties._agencyList ? color(d.properties._agencyList.length) : "#ccc";//#3CB371
+          })
+          .style("stroke", "#fff")
+          .on("mousemove", function (d) {
+            var mouse = d3.mouse(svg.node()).map(function (d) {
+              return parseInt(d);
+            });
+            var str = "<p><span>District:</span> <b>" + d.properties.DNAME_06 + "</b></p>"
+            if (d.properties._settlementList && d.properties._sectorList && d.properties._agencyList) {
+              str = str + "<p><span>Settlements:</span> <b>" + d.properties._settlementList.length + "</b></p>" +
+                "<p><span>Sectors:</span> <b>" + d.properties._sectorList.length + "</b></p>" +
+                "<p><span>Agencies:</span> <b>" + d.properties._agencyList.length + "</b></p>";
+            }
+            tooltip
+              .classed("d3-hide", false)
+              .attr("style", "left:" + (mouse[0] + 15) + "px;top:" + (mouse[1] + 20) + "px")
+              .html(str);
+          })
+          .on("mouseover", function (d) {
+            d3.select(this).style("fill", "#aaa");
+          })
+          .on("mouseout", function (d) {
+            d3.select(this).style("fill", d.properties._agencyList ? color(d.properties._agencyList.length) :
+              "#ccc");
+            tooltip.classed("d3-hide", true);
+          })
+          .attr("d", path)
+          .on("click", function (d) {
+            var needRemove = $(d3.select(this).node()).hasClass("d3-active"); //d3.select(this).attr("class");//d3-active
+            // d3.select(this).classed("d3-active", !needRemove).style("opacity", needRemove ? opacity : 1);
+            // d.properties._selected = !needRemove;
+            uganda.style("opacity", function (a) {
+              // var needRemove = $(d3.select(this).node()).hasClass("d3-active");
+              if (a.properties.DNAME_06 === d.properties.DNAME_06) {
+                a.properties._selected = !needRemove;
+                return a.properties._selected ? 1 : opacity;
+              }
+              return a.properties._selected ? 1 : opacity;
+            });
+            // settlements.style("opacity", opacity);
+            // d3.select(this).style("opacity", 1); //d3.selectAll(".district-" + d.properties.DNAME_06.replaceAll(' ', "_"))
+            // d3.select("#district-list").selectAll("p").style("background", "transparent");
+            d3.select(".district-list-" + d.properties.DNAME_06.replaceAll(' ', "_")).style("background", "#8cc4d3");
+            refreshCounts();
+            myFilter({
+              "key": d.properties.DNAME_06
+            }, "district");
+          });
+        // uganda.append("title").text(function (d) {
+        //   return d.properties.DNAME_06;
+        // });
+
+        // var gNode = g.node().getBBox();
+        // console.log(gNode);
+        // g.attr("transform", function (d) {
+        //   var x = (width-gNode.width)/2;
+        //   var y = (height-gNode.height)/2;
+        //   return "translate(" + x/2 + "," + y/2 + ")";
+        // });
+
+        g.append("g").attr("class", 'circle-group');
+        // var localDistrictSettlement = $.extend(true, [], districtSettlement);
+        var settlements = svg.select('.circle-group')
+          .selectAll('.settlement')
+          .data(districtSettlement);
+        settlements.enter().append('g')
+          .attr("class", function (d) {
+            return "settlement settlement-" + d.Settlement_ID;
+          })
+          .append('path')
+          .style("fill", "#fff")
+          .style("stroke-width", "0")
+          .style("cursor", "pointer")
+          .on("mousemove", function (d) {
+            var mouse = d3.mouse(svg.node()).map(function (d) {
+              return parseInt(d);
+            });
+            var str = "<p><span>Settlement:</span> <b>" + d.Settlement + "</b></p>"
+            tooltip
+              .classed("d3-hide", false)
+              .attr("style", "left:" + (mouse[0] + 15) + "px;top:" + (mouse[1] + 20) + "px")
+              .html(str);
+          })
+          .on("mouseover", function (d) {
+            d3.select(this).style("fill", "#aaa");
+          })
+          .on("mouseout", function (d) {
+            d3.select(this).style("fill", "#fff");
+            tooltip.classed("d3-hide", true);
+          })
+          .on("click", function (d) {
+            // uganda.style("opacity", opacity); //d3.selectAll(".district")
+            uganda.style("opacity", function (a) {
+              a.properties._selected = false;
+              return opacity;
+            });
+            d3.select(".district-" + d.District.replaceAll(' ', "_")).style("opacity", 1);
+            d3.select("#district-list").selectAll("p").style("background", "transparent");
+            d3.select(".district-list-" + d.District.replaceAll(' ', "_")).style("background", "#8cc4d3");
+            // var needRemove = $(d3.select(".district-" + d.District.replaceAll(' ', "_")).node()).hasClass("d3-active");
+            refreshCounts();
+            global.selectedDistrict = [];
+            myFilter({
+              "key": d.District
+            }, "district", false);
+            d3.select("#settlement-list").selectAll("p").style("background", "transparent");
+            d3.select(".settlement-list-" + d.Settlement_ID).style("background", "#8cc4d3");
+            // var needRemove = $(d3.select(this).node()).hasClass("d3-active");
+            myFilter({
+              "key": d.Settlement,
+              values: [{
+                "Settlement_ID": d.Settlement_ID
+              }]
+            }, "settlement", undefined);
+            settlements.style("opacity", opacity);
+            // settlements.style("opacity", function (a) {
+            //   if (a.Settlement_ID === d.Settlement_ID) {
+            //     a._selected = !needRemove;
+            //     return a._selected ? 1 : opacity;
+            //   }
+            //   return a._selected ? 1 : opacity;
+            // });
+            d3.select(this.parentNode).style("opacity", 1);
+            global.needRefreshDistrict = true;
+          });
+        settlements //.transition().duration(duration)
+          .each(function (d) {
+            d._coordinates = projection([d.Long, d.Lat]);
+          })
+          .attr("transform", function (d) {
+            return "translate(" + d._coordinates[0] + "," + d._coordinates[1] + ")rotate(-90)";
+          })
+          // .attr("x", function (d) {
+          //   return d._coordinates[0];
+          // })
+          // .attr("y", function (d) {
+          //   return d._coordinates[1];
+          // })
+          // .attr("r", 4);
+          .select("path")
+          .attr("d", 'M 0,0 m -5,-5 L 5,0 L -5,5 Z'); //http://bl.ocks.org/dustinlarimer/5888271
+        settlements.exit().remove();
+
+        // settlements.append("title").text(function (d) {
+        //   return d.Settlement;
+        // });
+
+        // zoom and pan
+        var zoom = d3.behavior.zoom().scaleExtent([1, 1])//.scaleExtent([0.5, 2])
+          .on("zoom", function () {
+            g.attr("transform", "translate(" +
+              d3.event.translate.join(",") + ")scale(" + d3.event.scale + ")");
+            // g.selectAll("circle")
+            //   .attr("d", path.projection(projection));
+            // g.selectAll("path")
+            //   .attr("d", path.projection(projection));
+          });
+
+        svg.call(zoom)
+
+
+        function refreshMap() {
+          // uganda.style("opacity", 1);
+          uganda.style("opacity", function (a) {
+            a.properties._selected = false;
+            return 1;
+          });
+          settlements.style("opacity", 1);
+          d3.select("#district-list").selectAll("p").style("background", "transparent");
+          d3.select("#sector-list").selectAll("p").style("background", "transparent");
+          d3.select("#settlement-list").selectAll("p").style("background", "transparent");
+          d3.select("#agency-list").selectAll("p").style("background", "transparent");
+          updateLeftPanel(districtList, [], [], [], dataset);
+          refreshCounts();
+        }
+        d3.select("#d3-map-refresh").on("click", refreshMap);
+
+
+        function onlyUnique(value, index, self) {
+          return self.indexOf(value) === index;
+        }
+
+        function filterSelectedItem(item, c, needRemove) {
+          if (needRemove) {
+            global[item] = global[item].filter(function (a) {
+              return a !== c;
+            });
+          } else {
+            global[item].push(c);
+          }
+          global[item] = global[item].filter(onlyUnique);
+        }
+
+        function myFilter(c, flag, needRemove) {
+          if (flag === "district") {
+            filterSelectedItem("selectedDistrict", c, needRemove);
+          }
+          if (flag === "settlement") {
+            global.selectedSettlement = c;
+            // filterSelectedItem("selectedSettlement", c, needRemove);
+          }
+          if (flag === "sector") {
+            filterSelectedItem("selectedSector", c, needRemove);
+          }
+          if (flag === "agency") {
+            filterSelectedItem("selectedAgency", c, needRemove);
+          }
+
+          var selectedDataset = dataset.filter(function (d) { //global.selectedDataset
+            var isDistrict = false; //global.selectedDistrict ? global.selectedDistrict.key === d.District : true;
+            if (global.selectedDistrict.length > 0) {
+              global.selectedDistrict.map(function (c) {
+                if (c.key === d.District) {
+                  isDistrict = true;
+                }
+              });
+            } else {
+              isSettlement = true;
+            }
+            var isSettlement = global.selectedSettlement ? global.selectedSettlement.values[0].Settlement_ID ===
+              d.Settlement_ID : true;
+            // var isSettlement = false;
+            // if (global.selectedSettlement.length > 0) {
+            //   global.selectedSettlement.map(function (c) {
+            //     if (c.values[0].Settlement_ID === d.Settlement_ID) {
+            //       isSettlement = true;
+            //     }
+            //   });
+            // } else {
+            //   isSettlement = true;
+            // }
+            // var isSector = global.selectedSector ? global.selectedSector.values[0].Sector_ID === d.Sector_ID : true;
+            var isSector = false;
+            if (global.selectedSector.length > 0) {
+              global.selectedSector.map(function (c) {
+                if (c.values[0].Sector_ID === d.Sector_ID) {
+                  isSector = true;
+                }
+              });
+            } else {
+              isSector = true;
+            }
+            // var isAgency = global.selectedAgency ? global.selectedAgency.values[0].Actor_ID === d.Actor_ID : true;
+            var isAgency = false;
+            if (global.selectedAgency.length > 0) {
+              global.selectedAgency.map(function (c) {
+                if (c.values[0].Actor_ID === d.Actor_ID) {
+                  isAgency = true;
+                }
+              });
+            } else {
+              isAgency = true;
+            }
+            return isDistrict && isSettlement && isSector && isAgency;
+          });
+
+          // console.log(selectedDataset.length, global.selectedDistrict, global.selectedSettlement, global.selectedSector, global.selectedAgency);
+
+          var settlementList = d3.nest().key(function (d) {
+            return d.Settlement;
+          }).sortKeys(d3.ascending).entries(selectedDataset);
+
+          var sectorList = d3.nest().key(function (d) {
+            return d.Sector;
+          }).sortKeys(d3.ascending).entries(selectedDataset);
+
+          var agencyList = d3.nest().key(function (d) {
+            return d.Name;
+          }).sortKeys(d3.ascending).entries(selectedDataset);
+
+          if (flag === "district") {
+            updateLeftPanel(null, sectorList, settlementList, agencyList, dataset);
+            d3.select("#district-count").text(global.selectedDistrict.length);
+          }
+          if (flag === "settlement") {
+            updateLeftPanel(null, sectorList, null, agencyList, dataset);
+            d3.select("#settlement-count").text("1");
+          }
+          if (flag === "sector") {
+            updateLeftPanel(null, null, settlementList, agencyList, dataset);
+            d3.select("#sector-count").text(global.selectedSector.length);
+          }
+          if (flag === "agency") {
+            updateLeftPanel(null, sectorList, settlementList, null, dataset);
+            d3.select("#agency-count").text(global.selectedAgency.length);
+          }
+        }
+
+
+
+        function updateLeftPanel(districtList, sectorList, settlementList, agencyList, dataset) {
+          // d3.select("#district-count").text(districtList.length);
+          if (districtList) {
+            var _districtList = d3.select("#district-list").selectAll("p")
+              .data(districtList);
+            _districtList.enter().append("p")
+              .text(function (d) {
+                return d.key;
+              })
+              .style("background", "transparent")
+              .on("click", function (c) {
+                if (global.needRefreshDistrict) {
+                  d3.select("#district-list").selectAll("p").style("background", "transparent");
+                  global.needRefreshDistrict = false;
+                }
+                settlements.style("opacity", opacity);
+                d3.select("#sector-list").selectAll("p").style("background", "transparent");
+                d3.select("#settlement-list").selectAll("p").style("background", "transparent");
+                d3.select("#agency-list").selectAll("p").style("background", "transparent");
+                // d3.select(this.parentNode).selectAll("p").style("background", "transparent");
+                var needRemove = $(d3.select(this).node()).hasClass("d3-active"); //d3.select(this).attr("class");//d3-active
+                d3.select(this).classed("d3-active", !needRemove).style("background", needRemove ? "transparent" :
+                  "#8cc4d3");
+                refreshCounts();
+                myFilter(c, "district", needRemove);
+                uganda.style("opacity", function (a) {
+                  if (a.properties.DNAME_06 === c.key) {
+                    a.properties._selected = !needRemove;
+                    return a.properties._selected ? 1 : opacity;
+                  }
+                  return a.properties._selected ? 1 : opacity;
+                });
+                // d3.select(".district-" + c.key.replaceAll(' ', "_")).style("opacity", 1);
+              });
+            _districtList //.transition().duration(duration)
+              .attr("class", function (d) {
+                return "district-list-" + d.key.replaceAll(' ', "_");
+              })
+              .text(function (d) {
+                return d.key;
+              });
+            _districtList.exit().remove();
+          }
+
+          if (sectorList) {
+            d3.select("#sector-count").text(sectorList.length);
+            var _sectorList = d3.select("#sector-list").selectAll("p")
+              .data(sectorList);
+            _sectorList.enter().append("p")
+              .text(function (d) {
+                return d.key;
+              })
+              .style("background", "transparent")
+              .on("click", function (c) {
+                // d3.select(this.parentNode).selectAll("p").style("background", "transparent");
+                // d3.select(this).style("background", "#8cc4d3");
+                var needRemove = $(d3.select(this).node()).hasClass("d3-active"); //d3.select(this).attr("class");//d3-active
+                d3.select(this).classed("d3-active", !needRemove).style("background", needRemove ? "transparent" :
+                  "#8cc4d3");
+                myFilter(c, "sector", needRemove);
+              });
+            _sectorList //.transition().duration(duration)
+              .text(function (d) {
+                return d.key;
+              });
+            _sectorList.exit().remove();
+          }
+
+          if (settlementList) {
+            d3.select("#settlement-count").text(settlementList.length);
+            var _settlementList = d3.select("#settlement-list").selectAll("p")
+              .data(settlementList);
+            _settlementList.enter().append("p")
+              .text(function (d) {
+                return d.key;
+              })
+              .style("background", "transparent")
+              .on("click", function (c) {
+                d3.select(this.parentNode).selectAll("p").style("background", "transparent");
+                d3.select(this).style("background", "#8cc4d3");
+                // var needRemove = $(d3.select(this).node()).hasClass("d3-active"); //d3.select(this).attr("class");//d3-active
+                // d3.select(this).classed("d3-active", !needRemove).style("background", needRemove ? "transparent" :
+                //   "#8cc4d3");
+                myFilter(c, "settlement", undefined);
+                settlements.style("opacity", opacity);
+                // settlements.style("opacity", function (a) {
+                //   if (a.Settlement_ID === c.values[0].Settlement_ID) {
+                //     a._selected = !needRemove;
+                //     return a._selected ? 1 : opacity;
+                //   }
+                //   return a._selected ? 1 : opacity;
+                // });
+                // d3.select(".settlement").style("opacity", 0);
+                d3.select(".settlement-" + c.values[0].Settlement_ID).style("opacity", 1);
+              });
+            _settlementList
+              .attr("class", function (d) {
+                return "settlement-list-" + d.values[0].Settlement_ID;
+              })
+              .text(function (d) {
+                return d.key;
+              });
+            _settlementList.exit().remove();
+          }
+          if (agencyList) {
+            d3.select("#agency-count").text(agencyList.length);
+            var _agencyList = d3.select("#agency-list").selectAll("p")
+              .data(agencyList);
+            _agencyList.enter().append("p")
+              .text(function (d) {
+                return d.key;
+              })
+              .style("background", "transparent")
+              .on("click", function (c) {
+                var needRemove = $(d3.select(this).node()).hasClass("d3-active"); //d3.select(this).attr("class");//d3-active
+                d3.select(this).classed("d3-active", !needRemove).style("background", needRemove ? "transparent" :
+                  "#8cc4d3");
+                myFilter(c, "sector", needRemove);
+              });
+            _agencyList
+              .text(function (d) {
+                return d.key;
+              });
+            _agencyList.exit().remove();
+          }
+        }
+
+        window.addEventListener("resize", function () {
+          var wrapper = d3.select("#d3-map-wrapper");
+          var width = wrapper.node().offsetWidth || 960;
+          var height = wrapper.node().offsetHeight || 480;
+          if (width) {
+            d3.select("#d3-map-wrapper").select("svg")
+              .attr("viewBox", "0 0 " + width + " " + height)
+              .attr("width", width)
+              .attr("height", height);
+          }
+        });
+      }
+
+    })($, d3);
+  </script>
+</body>
+
+</html>
